@@ -53,7 +53,7 @@ const AddPlant = () => {
       // post req
       await axiosSecure.post("/plants", plantData);
       toast.success("Data Added Successfully!");
-      navegate("/");
+      navegate("/dashboard/my-inventory");
     } catch (err) {
       console.log(err);
     } finally {

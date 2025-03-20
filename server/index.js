@@ -169,6 +169,16 @@ async function run() {
       res.send(result);
     });
 
+    // get invantory data for seller
+    app.get("/plants/seller", verifyToken, verifySeller, async (req, res) => {
+      const email = req.user.email;
+      const result = await plantsCollection.find({'seller.email':email}).toArray()
+      res.send( result)
+    });
+
+
+
+
     // Manage plant quantity
     app.patch("/plants/quantity/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
