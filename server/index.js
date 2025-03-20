@@ -55,6 +55,30 @@ async function run() {
     const plantsCollection = db.collection("plants");
     const ordersCollection = db.collection("orders");
 
+    // verify admin middlerar
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.user?.email;
+      const query = { email };
+      const result = await usersColloection.findOne(query);
+      if (!result || result?.role !== "admin")
+        return res
+          .status(403)
+          .send({ message: "Foebidden Admin only Action" });
+      next();
+    };
+
+    // verify seller middlaer
+    const verifySeller = async (req, res, next) => {
+      const email = req.user?.email;
+      const query = { email };
+      const result = await usersColloection.findOne(query);
+      if (!result || result?.role !== "seller")
+        return res
+          .status(403)
+          .send({ message: "Foebidden Seller only Action" });
+      next();
+    };
+
     // save or update & users in db
     app.post("/users/:email", async (req, res) => {
       const email = req.params.email;
@@ -74,7 +98,7 @@ async function run() {
     });
 
     // data save in the db
-    app.post("/plants", async (req, res) => {
+    app.post("/plants",verifyToken, verifySeller, async (req, res) => {
       const plant = req.body;
       const result = await plantsCollection.insertOne(plant);
       res.send(result);
@@ -100,7 +124,7 @@ async function run() {
       res.send(result);
     });
     // manage user status and role
-    app.patch("/users/:email",  async (req, res) => {
+    app.patch("/users/:email", async (req, res) => {
       const email = req.params.email;
       const query = { email };
       const user = await usersColloection.findOne(query);
@@ -126,35 +150,24 @@ async function run() {
 
     // get all user data
 
-    app.get('/all-users/:email', async (req, res) => {
-      const email = req.params.email
-      const query = { email: { $ne: email } }
-      const result = await usersColloection.find(query).toArray()
-      res.send(result)
-    })
+    app.get("/all-users/:email", verifyToken, verifyAdmin, async (req, res) => {
+      const email = req.params.email;
+      const query = { email: { $ne: email } };
+      const result = await usersColloection.find(query).toArray();
+      res.send(result);
+    });
 
     // update a user role & status
-    app.patch(
-      "/user/role/:email",
-      async (req, res) => {
-        const email = req.params.email;
-        const { role } = req.body;
-        const filter = { email };
-        const updateDoc = {
-          $set: { role, status: "Verified" },
-        };
-        const result = await usersColloection.updateOne(filter, updateDoc);
-        res.send(result);
-      }
-    );
-
-
-
-
-
-
-
-
+    app.patch("/user/role/:email", async (req, res) => {
+      const email = req.params.email;
+      const { role } = req.body;
+      const filter = { email };
+      const updateDoc = {
+        $set: { role, status: "Verified" },
+      };
+      const result = await usersColloection.updateOne(filter, updateDoc);
+      res.send(result);
+    });
 
     // Manage plant quantity
     app.patch("/plants/quantity/:id", verifyToken, async (req, res) => {
