@@ -5,6 +5,7 @@ const cookieParser = require("cookie-parser");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const jwt = require("jsonwebtoken");
 const morgan = require("morgan");
+const nodemailer = require("nodemailer");
 
 const port = process.env.PORT || 9000;
 const app = express();
@@ -35,6 +36,44 @@ const verifyToken = async (req, res, next) => {
     next();
   });
 };
+
+// send email using nodemailer
+const sendEmail = (emailAddress, emailData) => {
+  // create transporter
+  const transporter = nodemailer.createTransport({
+    host: "smtp.gmail.com",
+    port: 587,
+    secure: false, // true for port 465, false for other ports
+    auth: {
+      user: process.env.NODEMAILER_USER,
+      pass: process.env.NODEMAILER_PASS,
+    },
+  });
+  // Verify connection
+  transporter.verify((error, success) => {
+    if (error) {
+      console.log(error);
+    } else {
+      console.log("Transporter is ready to emails.", success);
+    }
+  });
+  // transporter.sendMail()
+  const mailBody = {
+    from: process.env.NODEMAILER_USER, // sender address
+    to: emailAddress, // list of receivers
+    subject: emailData?.subject, // Subject line
+    html: `<p>${emailData?.message}</p>`, // html body
+  };
+  // send email
+  transporter.sendMail(mailBody, (error, info) => {
+    if (error) {
+      console.log(error);
+    } else {
+      // console.log(info)
+      console.log("Email Sent: " + info?.response);
+    }
+  });
+}
 
 const uri = `mongodb://${process.env.DB_USER}:${process.env.DB_PASS}@ac-cgkxfia-shard-00-00.x9t7sgg.mongodb.net:27017,ac-cgkxfia-shard-00-01.x9t7sgg.mongodb.net:27017,ac-cgkxfia-shard-00-02.x9t7sgg.mongodb.net:27017/?ssl=true&replicaSet=atlas-nszs70-shard-0&authSource=admin&retryWrites=true&w=majority&appName=Cluster0`;
 // const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.mq0mae1.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`
@@ -178,6 +217,20 @@ async function run() {
       const orderInfo = req.body;
       console.log(orderInfo);
       const result = await ordersCollection.insertOne(orderInfo);
+      // Send Email
+      if (result?.insertedId) {
+        // To Customer
+        sendEmail(orderInfo?.customer?.email, {
+          subject: "Order Successful",
+          message: `You've placed an order successfully. Transaction Id: ${result?.insertedId}`,
+        });
+
+        // To Seller
+        sendEmail(orderInfo?.seller, {
+          subject: "Hurray!, You have an order to process.",
+          message: `Get the plants ready for ${orderInfo?.customer?.name}`,
+        });
+      }
       res.send(result);
     });
 
@@ -209,6 +262,7 @@ async function run() {
 
     // get all orders for a specific customer
     app.get("/customer-orders/:email", verifyToken, async (req, res) => {
+      sendEmail()
       const email = req.params.email;
       const result = await ordersCollection
         .aggregate([
