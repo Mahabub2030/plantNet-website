@@ -73,7 +73,7 @@ const sendEmail = (emailAddress, emailData) => {
       console.log("Email Sent: " + info?.response);
     }
   });
-}
+};
 
 const uri = `mongodb://${process.env.DB_USER}:${process.env.DB_PASS}@ac-cgkxfia-shard-00-00.x9t7sgg.mongodb.net:27017,ac-cgkxfia-shard-00-01.x9t7sgg.mongodb.net:27017,ac-cgkxfia-shard-00-02.x9t7sgg.mongodb.net:27017/?ssl=true&replicaSet=atlas-nszs70-shard-0&authSource=admin&retryWrites=true&w=majority&appName=Cluster0`;
 // const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.mq0mae1.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`
@@ -262,7 +262,7 @@ async function run() {
 
     // get all orders for a specific customer
     app.get("/customer-orders/:email", verifyToken, async (req, res) => {
-      sendEmail()
+      sendEmail();
       const email = req.params.email;
       const result = await ordersCollection
         .aggregate([
@@ -349,10 +349,10 @@ async function run() {
       }
     );
     // update a orders & status
-    app.patch("/orders/:id", verifyToken,verifySeller, async (req, res) => {
+    app.patch("/orders/:id", verifyToken, verifySeller, async (req, res) => {
       const id = req.params.id;
       const { status } = req.body;
-      const filter = { _id:new ObjectId(id) };
+      const filter = { _id: new ObjectId(id) };
       const updateDoc = {
         $set: { status },
       };
@@ -372,6 +372,19 @@ async function run() {
       const result = await ordersCollection.deleteOne(query);
       res.send(result);
     });
+
+    // admin state start here
+    app.get("/admin-stat", verifyToken, verifyAdmin, async (req, res) => {
+      const totalUser = await usersColloection.estimatedDocumentCount();
+      const totalPlants = await plantsCollection.estimatedDocumentCount();
+
+      const allOrder = await ordersCollection.find().toArray();
+      const totalPrice = allOrder.reduce((sum, order) => sum +order.price, 0)
+      res.send({ totalUser, totalPlants, totalPrice });
+    });
+    // admin state ends here
+
+    // orders get from db
 
     // Generate jwt token
     app.post("/jwt", async (req, res) => {
