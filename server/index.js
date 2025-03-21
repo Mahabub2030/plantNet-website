@@ -61,9 +61,7 @@ async function run() {
       const query = { email };
       const result = await usersColloection.findOne(query);
       if (!result || result?.role !== "admin")
-        return res
-          .status(403)
-          .send({ message: "Foebidden Admin only Action" });
+        return res.status(403).send({ message: "Foebidden Admin only Action" });
       next();
     };
 
@@ -98,29 +96,9 @@ async function run() {
     });
 
     // data save in the db
-    app.post("/plants",verifyToken, verifySeller, async (req, res) => {
+    app.post("/plants", verifyToken, verifySeller, async (req, res) => {
       const plant = req.body;
       const result = await plantsCollection.insertOne(plant);
-      res.send(result);
-    });
-    // get all data from db
-    app.get("/plants", async (req, res) => {
-      const result = await plantsCollection.find().limit(20).toArray();
-      res.send(result);
-    });
-
-    // get a data by id
-    app.get("/plants/:id", async (req, res) => {
-      const id = req.params.id;
-      const query = { _id: new ObjectId(id) };
-      const result = await plantsCollection.findOne(query);
-      res.send(result);
-    });
-    // save order data in db
-    app.post("/order", async (req, res) => {
-      const orderInfo = req.body;
-      console.log(orderInfo);
-      const result = await ordersCollection.insertOne(orderInfo);
       res.send(result);
     });
     // manage user status and role
@@ -141,22 +119,13 @@ async function run() {
       console.log(result);
       res.send(result);
     });
-    // get user role
-    app.get("/users/role/:email", async (req, res) => {
-      const email = req.params.email;
-      const result = await usersColloection.findOne({ email });
-      res.send({ role: result?.role });
-    });
-
     // get all user data
-
     app.get("/all-users/:email", verifyToken, verifyAdmin, async (req, res) => {
       const email = req.params.email;
       const query = { email: { $ne: email } };
       const result = await usersColloection.find(query).toArray();
       res.send(result);
     });
-
     // update a user role & status
     app.patch("/user/role/:email", async (req, res) => {
       const email = req.params.email;
@@ -169,15 +138,57 @@ async function run() {
       res.send(result);
     });
 
-    // get invantory data for seller
+    // get inventory data for seller
     app.get("/plants/seller", verifyToken, verifySeller, async (req, res) => {
       const email = req.user.email;
-      const result = await plantsCollection.find({'seller.email':email}).toArray()
-      res.send( result)
+      const result = await plantsCollection
+        .find({ "seller.email": email })
+        .toArray();
+      res.send(result);
+    });
+    // delete a plant from db by seller
+    app.delete("/plants/:id", verifyToken, verifySeller, async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await plantsCollection.deleteOne(query);
+      res.send(result);
+    });
+    // get user role
+    app.get("/users/role/:email", async (req, res) => {
+      const email = req.params.email;
+      const result = await usersColloection.findOne({ email });
+      res.send({ role: result?.role });
     });
 
+    // get all data from db
+    app.get("/plants", async (req, res) => {
+      const result = await plantsCollection.find().limit(20).toArray();
+      res.send(result);
+    });
 
+    // get a data by id
+    app.get("/plants/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await plantsCollection.findOne(query);
+      res.send(result);
+    });
+    // save order data in db
+    app.post("/order", async (req, res) => {
+      const orderInfo = req.body;
+      console.log(orderInfo);
+      const result = await ordersCollection.insertOne(orderInfo);
+      res.send(result);
+    });
 
+    // get inventory data for seller
+    app.get("/plants/seller", verifyToken, verifySeller, async (req, res) => {
+      const email = req.user.email;
+      const result = await plantsCollection
+        .find({ "seller.email": email })
+        .toArray();
+      res.send(result);
+    });
 
     // Manage plant quantity
     app.patch("/plants/quantity/:id", verifyToken, async (req, res) => {
@@ -238,6 +249,63 @@ async function run() {
 
       res.send(result);
     });
+    // get all orders for a specific seller
+    app.get(
+      "/seller-orders/:email",
+      verifyToken,
+      verifySeller,
+      async (req, res) => {
+        const email = req.params.email;
+        const result = await ordersCollection
+          .aggregate([
+            {
+              $match: { seller: email }, //Match specific customers data only by email
+            },
+            {
+              $addFields: {
+                plantId: { $toObjectId: "$plantId" }, //convert plantId string field to objectId field
+              },
+            },
+            {
+              $lookup: {
+                // go to a different collection and look for data
+                from: "plants", // collection name
+                localField: "plantId", // local data that you want to match
+                foreignField: "_id", // foreign field name of that same data
+                as: "plants", // return the data as plants array (array naming)
+              },
+            },
+            { $unwind: "$plants" }, // unwind lookup result, return without array
+            {
+              $addFields: {
+                // add these fields in order object
+                name: "$plants.name",
+              },
+            },
+            {
+              // remove plants object property from order object
+              $project: {
+                plants: 0,
+              },
+            },
+          ])
+          .toArray();
+
+        res.send(result);
+      }
+    );
+    // update a orders & status
+    app.patch("/orders/:id", verifyToken,verifySeller, async (req, res) => {
+      const id = req.params.id;
+      const { status } = req.body;
+      const filter = { _id:new ObjectId(id) };
+      const updateDoc = {
+        $set: { status },
+      };
+      const result = await ordersCollection.updateOne(filter, updateDoc);
+      res.send(result);
+    });
+
     // Cancel/delete an order
     app.delete("/orders/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
