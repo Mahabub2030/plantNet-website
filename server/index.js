@@ -6,6 +6,7 @@ const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const jwt = require("jsonwebtoken");
 const morgan = require("morgan");
 const nodemailer = require("nodemailer");
+const stripe = require("stripe")(process.env.PAYMENT_SCRETAE_KEY);
 
 const port = process.env.PORT || 9000;
 const app = express();
@@ -379,12 +380,84 @@ async function run() {
       const totalPlants = await plantsCollection.estimatedDocumentCount();
 
       const allOrder = await ordersCollection.find().toArray();
-      const totalPrice = allOrder.reduce((sum, order) => sum +order.price, 0)
-      res.send({ totalUser, totalPlants, totalPrice });
+      // const totalPrice = allOrder.reduce((sum, order) => sum + order.price, 0)
+      // get total revanus , total  orders
+      const chartData = await ordersCollection
+        .aggregate([
+          { $sort: { _id: -1 } },
+          {
+            $addFields: {
+              _id: {
+                $dateToString: {
+                  format: "%Y-%m-%d",
+                  date: { $toDate: "$_id" },
+                },
+              },
+              quantity: {
+                $sum: "$quantity",
+              },
+              price: { $sum: "$price" },
+              order: { $sum: 1 },
+            },
+          },
+
+          {
+            $project: {
+              _id: 0,
+              date: "$_id",
+              quantity: 1,
+              order: 1,
+              price: 1,
+            },
+          },
+        ])
+        .toArray();
+      const ordersDetails = await ordersCollection
+        .aggregate([
+          {
+            $group: {
+              _id: null,
+              totalRevenue: { $sum: "$price" },
+              totalOrder: { $sum: 1 },
+            },
+          },
+          {
+            $project: {
+              _id: 0,
+            },
+          },
+        ])
+        .next();
+
+      res.send({
+        totalPlants,
+        totalUser,
+        ...ordersDetails,
+        chartData,
+      });
     });
     // admin state ends here
 
-    // orders get from db
+    // create apyments
+    // create payment intent
+    app.post("/create-payment-intent", verifyToken, async (req, res) => {
+      const { quantity, plantId } = req.body;
+      const plant = await plantsCollection.findOne({
+        _id: new ObjectId(plantId),
+      });
+      if (!plant) {
+        return res.status(400).send({ message: "Plant Not Found" });
+      }
+      const totalPrice = quantity * plant.price * 100; // total price in cent (poysha)
+      const { client_secret } = await stripe.paymentIntents.create({
+        amount: totalPrice,
+        currency: "usd",
+        automatic_payment_methods: {
+          enabled: true,
+        },
+      });
+      res.send({ clientSecret: client_secret });
+    });
 
     // Generate jwt token
     app.post("/jwt", async (req, res) => {
